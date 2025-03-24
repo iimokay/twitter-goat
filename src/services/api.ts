@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import { Server } from 'http';
 import { TwitterLoginCredentials } from './client';
 import { logger } from '../utils/logger';
 import { AccountManager } from './accountManager';
@@ -8,6 +9,7 @@ export class ApiService {
   private app = express();
   private accountManager: AccountManager;
   private port = 3000;
+  private server: Server | null = null;
 
   constructor() {
     this.accountManager = AccountManager.getInstance();
@@ -22,32 +24,32 @@ export class ApiService {
   }
 
   private setupRoutes(): void {
-    // 健康检查
+    // Health check
     this.app.get('/health', (req: Request, res: Response) => {
-      logger.info('健康检查', req.hostname);
+      logger.info('Health check', req.hostname);
       res.json({ status: 'ok' });
     });
 
-    // 登录账号（自动创建）
+    // Login account (auto create)
     this.app.post('/login', async (req: Request, res: Response) => {
       try {
         const credentials: TwitterLoginCredentials = req.body;
         if (!credentials.username || !credentials.password || !credentials.email) {
-          res.status(400).json({ status: 'error', message: '缺少必要的登录信息' });
+          res.status(400).json({ status: 'error', message: 'Missing required login information' });
           return;
         }
 
-        // 使用用户名作为账号ID
+        // Use username as account ID
         const accountId = credentials.username;
 
-        // 检查账号是否已存在
+        // Check if account exists
         const existingClient = this.accountManager.getClient(accountId);
         if (existingClient) {
-          // 如果账号已存在，直接尝试登录
+          // If account exists, try to login directly
           await this.accountManager.login(accountId, credentials);
           res.json({
             status: 'ok',
-            message: '登录成功',
+            message: 'Login successful',
             data: {
               accountId,
               username: credentials.username
@@ -56,132 +58,132 @@ export class ApiService {
           return;
         }
 
-        // 如果账号不存在，创建新账号
+        // If account doesn't exist, create new account
         await this.accountManager.createClient(accountId);
         await this.accountManager.login(accountId, credentials);
         res.json({
           status: 'ok',
-          message: '登录成功',
+          message: 'Login successful',
           data: {
             accountId,
             username: credentials.username
           }
         });
       } catch (error) {
-        res.status(500).json({ status: 'error', message: '登录失败', error });
+        res.status(500).json({ status: 'error', message: 'Login failed', error });
       }
     });
 
-    // 搜索推文
+    // Search tweets
     this.app.get('/accounts/:accountId/search', async (req: Request, res: Response) => {
       try {
         const { accountId } = req.params;
         if (!accountId || typeof accountId !== 'string') {
-          res.status(400).json({ status: 'error', message: '缺少账号ID' });
+          res.status(400).json({ status: 'error', message: 'Missing account ID' });
           return;
         }
 
         const { query, limit = 20 } = req.query;
         if (!query || typeof query !== 'string') {
-          res.status(400).json({ status: 'error', message: '缺少搜索关键词' });
+          res.status(400).json({ status: 'error', message: 'Missing search query' });
           return;
         }
 
         const client = this.accountManager.getClient(accountId);
         if (!client) {
-          res.status(404).json({ status: 'error', message: '账号不存在' });
+          res.status(404).json({ status: 'error', message: 'Account not found' });
           return;
         }
 
         const tweets = await client.searchTweets(query, Number(limit), SearchMode.Latest);
         res.json({ status: 'ok', data: tweets });
       } catch (error) {
-        res.status(500).json({ status: 'error', message: '搜索推文失败', error });
+        res.status(500).json({ status: 'error', message: 'Failed to search tweets', error });
       }
     });
 
-    // 发送推文回复
+    // Send tweet reply
     this.app.post('/accounts/:accountId/tweet', async (req: Request, res: Response) => {
       try {
         const { accountId } = req.params;
         if (!accountId || typeof accountId !== 'string') {
-          res.status(400).json({ status: 'error', message: '缺少账号ID' });
+          res.status(400).json({ status: 'error', message: 'Missing account ID' });
           return;
         }
 
         const { tweetId, replyText } = req.body;
         if (!tweetId || !replyText) {
-          res.status(400).json({ status: 'error', message: '缺少必要参数' });
+          res.status(400).json({ status: 'error', message: 'Missing required parameters' });
           return;
         }
 
         const client = this.accountManager.getClient(accountId);
         if (!client) {
-          res.status(404).json({ status: 'error', message: '账号不存在' });
+          res.status(404).json({ status: 'error', message: 'Account not found' });
           return;
         }
 
         await client.sendReply(tweetId, replyText);
-        res.json({ status: 'ok', message: '回复发送成功' });
+        res.json({ status: 'ok', message: 'Reply sent successfully' });
       } catch (error) {
-        res.status(500).json({ status: 'error', message: '发送回复失败', error });
+        res.status(500).json({ status: 'error', message: 'Failed to send reply', error });
       }
     });
 
-    // 获取用户资料
+    // Get user profile
     this.app.get('/accounts/:accountId/user/:username', async (req: Request, res: Response) => {
       try {
         const { accountId, username } = req.params;
         if (!accountId || typeof accountId !== 'string') {
-          res.status(400).json({ status: 'error', message: '缺少账号ID' });
+          res.status(400).json({ status: 'error', message: 'Missing account ID' });
           return;
         }
 
         if (!username || typeof username !== 'string') {
-          res.status(400).json({ status: 'error', message: '缺少用户名' });
+          res.status(400).json({ status: 'error', message: 'Missing username' });
           return;
         }
 
         const client = this.accountManager.getClient(accountId);
         if (!client) {
-          res.status(404).json({ status: 'error', message: '账号不存在' });
+          res.status(404).json({ status: 'error', message: 'Account not found' });
           return;
         }
 
         const profile = await client.getProfile(username);
         res.json({ status: 'ok', data: profile });
       } catch (error) {
-        res.status(500).json({ status: 'error', message: '获取用户资料失败', error });
+        res.status(500).json({ status: 'error', message: 'Failed to get user profile', error });
       }
     });
 
-    // 获取用户推文
+    // Get user tweets
     this.app.get(
       '/accounts/:accountId/user/:username/tweets',
       async (req: Request, res: Response) => {
         try {
           const { accountId, username } = req.params;
           if (!accountId || typeof accountId !== 'string') {
-            res.status(400).json({ status: 'error', message: '缺少账号ID' });
+            res.status(400).json({ status: 'error', message: 'Missing account ID' });
             return;
           }
 
           if (!username || typeof username !== 'string') {
-            res.status(400).json({ status: 'error', message: '缺少用户名' });
+            res.status(400).json({ status: 'error', message: 'Missing username' });
             return;
           }
 
           const { limit = 20 } = req.query;
           const client = this.accountManager.getClient(accountId);
           if (!client) {
-            res.status(404).json({ status: 'error', message: '账号不存在' });
+            res.status(404).json({ status: 'error', message: 'Account not found' });
             return;
           }
 
           const tweets = await client.getUserTweets(username, Number(limit));
           res.json({ status: 'ok', data: tweets });
         } catch (error) {
-          res.status(500).json({ status: 'error', message: '获取用户推文失败', error });
+          res.status(500).json({ status: 'error', message: 'Failed to get user tweets', error });
         }
       }
     );
@@ -189,17 +191,30 @@ export class ApiService {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private errorHandler(err: Error, req: Request, res: Response, _next: NextFunction): void {
-    logger.error('API 错误:', err, req.baseUrl);
-    res.status(500).json({ status: 'error', message: '服务器内部错误', error: err.message });
+    logger.error('API Error:', err, req.baseUrl);
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 
   async start(): Promise<void> {
     try {
-      this.app.listen(this.port, () => {
-        logger.info(`API 服务已启动，监听端口 ${this.port}`);
+      this.server = this.app.listen(this.port, () => {
+        logger.info(`API service started, listening on port ${this.port}`);
       });
     } catch (error) {
-      logger.error('启动 API 服务失败:', error);
+      logger.error('Failed to start API service:', error);
+      throw error;
+    }
+  }
+
+  async stop(): Promise<void> {
+    try {
+      if (this.server) {
+        this.server.close(() => {
+          logger.info('API service stopped');
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to stop API service:', error);
       throw error;
     }
   }
