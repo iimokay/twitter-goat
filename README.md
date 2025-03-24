@@ -1,28 +1,32 @@
-# Twitter 自动回复机器人
+# Twitter Goat
 
-这是一个基于 Node.js 的 Twitter 自动回复机器人项目，可以自动监控特定推文并发送回复。
+一个基于 Node.js 的 Twitter API 服务，支持多账号管理和自动化操作。
 
 ## 功能特点
 
-- 自动监控 Twitter 推文
-- 支持自定义回复内容
-- 使用 PostgreSQL 数据库存储数据（支持向量搜索）
-- 支持多账号管理
-- 自动保存和更新 Twitter Cookies
-- 守护进程自动恢复
-- Docker 容器化部署
+- 多账号管理
+  - 支持多个 Twitter 账号同时运行
+  - 自动管理账号登录状态
+  - 自动处理 Cookie 更新
+
+- RESTful API 接口
+  - 健康检查接口
+  - 账号管理接口
+  - 推文搜索和回复
+  - 用户资料查询
+
+- 系统特性
+  - 优雅关闭支持
+  - 服务状态监控
+  - 完整的错误处理
+  - 详细的日志记录
 
 ## 环境要求
 
-- Node.js >= 22
-- PostgreSQL >= 17 (with pgvector)
+- Node.js >= 18
 - pnpm >= 8
-- Docker (可选)
-- Docker Compose V2 (可选)
 
-## 安装步骤
-
-### 方式一：本地运行
+## 快速开始
 
 1. 克隆项目
 
@@ -38,23 +42,21 @@ pnpm install
 ```
 
 3. 配置环境变量
-创建 `.env` 文件并添加以下配置：
+
+复制 `.env.example` 到 `.env` 并配置：
 
 ```env
-# 数据库配置
-DATABASE_URL=postgresql://username:password@localhost:5432/dbname
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=twitter_bot
+# API 服务配置
+PORT=3000
 
-# Twitter 配置
+# Twitter 账号配置
 TWITTER_USERNAME=your_username
 TWITTER_PASSWORD=your_password
 TWITTER_EMAIL=your_email
-TWITTER_2FA_SECRET=your_2fa_secret
+TWITTER_2FA_SECRET=your_2fa_secret  # 可选
 ```
 
-4. 运行项目
+4. 运行服务
 
 ```bash
 # 开发模式
@@ -65,82 +67,94 @@ pnpm build
 pnpm start
 ```
 
-### 方式二：Docker 运行
+## API 接口说明
 
-1. 克隆项目并进入目录
+### 健康检查
+- `GET /health`
+  - 检查服务运行状态
+  - 返回: `{ status: 'ok' }`
 
-```bash
-git clone [项目地址]
-cd twitter-goat
-```
+### 账号管理
+- `POST /login`
+  - 登录 Twitter 账号
+  - 自动创建账号（如果不存在）
+  - 请求体:
+    ```json
+    {
+      "username": "your_username",
+      "password": "your_password",
+      "email": "your_email",
+      "twoFactorSecret": "optional_2fa_secret"
+    }
+    ```
+  - 返回: 账号 ID 和登录状态
 
-2. 配置环境变量
-复制 `.env.example` 为 `.env` 并填写配置（同上）
+### 推文操作
+- `GET /accounts/:accountId/search`
+  - 搜索推文
+  - 参数:
+    - `query`: 搜索关键词
+    - `limit`: 返回数量（默认: 20）
 
-3. 使用 Docker Compose 启动
+- `POST /accounts/:accountId/tweet`
+  - 发送推文回复
+  - 请求体:
+    ```json
+    {
+      "tweetId": "target_tweet_id",
+      "replyText": "reply_content"
+    }
+    ```
 
-```bash
-# 构建并启动容器
-docker compose up -d
+### 用户操作
+- `GET /accounts/:accountId/user/:username`
+  - 获取用户资料
 
-# 查看日志
-docker compose logs -f
-
-# 停止服务
-docker compose down
-
-# 停止服务并删除数据卷
-docker compose down -v
-```
-
-## 数据库设置
-
-项目使用 PostgreSQL 数据库（带 pgvector 扩展），会自动创建以下表：
-
-- `x_twitter_cookies`: 存储 Twitter 账号的 cookies
-- `x_replied_tweets`: 记录已回复的推文
-- `x_account_profiles`: 用户档案信息
-- `x_events`: 系统事件记录
-
-## 注意事项
-
-1. 数据库连接
-   - 确保 PostgreSQL 服务已启动
-   - 检查数据库连接字符串是否正确
-   - 确保数据库用户有足够的权限
-   - pgvector 扩展用于向量搜索功能
-
-2. Twitter 账号
-   - 需要提供有效的 Twitter 账号信息
-   - 建议定期更新 cookies 以保持登录状态
-   - 注意遵守 Twitter 的使用条款和限制
-
-3. Docker 部署
-   - 确保 Docker 和 Docker Compose V2 已正确安装
-   - 数据库数据会持久化保存在 Docker 卷中
-   - 可以通过环境变量自定义配置
-   - 使用健康检查确保服务正常运行
-
-4. 守护进程
-   - 程序会自动处理异常并尝试恢复
-   - 支持优雅关闭
-   - 可以通过日志监控运行状态
+- `GET /accounts/:accountId/user/:username/tweets`
+  - 获取用户推文列表
+  - 参数:
+    - `limit`: 返回数量（默认: 20）
 
 ## 项目结构
 
 ```
 twitter-goat/
 ├── src/
-│   ├── config/     # 配置文件
-│   ├── db/         # 数据库相关
-│   ├── services/   # 业务逻辑
-│   └── utils/      # 工具函数
-├── dist/           # 编译后的文件
-├── .env           # 环境变量
-├── Dockerfile     # Docker 构建文件
-├── docker-compose.yml # Docker 编排文件
-└── package.json   # 项目配置
+│   ├── services/          # 服务实现
+│   │   ├── api.ts        # API 服务
+│   │   └── client.ts     # Twitter 客户端服务
+│   └── utils/            # 工具函数
+│       ├── logger.ts     # 日志工具
+│       └── serviceManager.ts  # 服务管理器
+├── dist/                 # 编译后的文件
+└── package.json         # 项目配置
 ```
+
+## 错误处理
+
+服务包含完整的错误处理机制：
+- 输入验证
+- 账号认证
+- 请求限流
+- 服务状态监控
+
+## 开发说明
+
+1. 代码规范
+   - 使用 ESLint 进行代码检查
+   - 使用 Prettier 进行代码格式化
+   - 运行 `pnpm format` 格式化代码
+   - 运行 `pnpm lint` 检查代码规范
+
+2. 服务管理
+   - 支持优雅关闭
+   - 自动处理 SIGINT/SIGTERM 信号
+   - 完整的服务生命周期管理
+
+3. 日志记录
+   - 使用 pino 进行日志记录
+   - 支持开发环境美化输出
+   - 记录详细的操作和错误信息
 
 ## 贡献指南
 
